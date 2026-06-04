@@ -1,0 +1,34 @@
+<html><head><style>@page { size: A4 portrait; margin: 0mm 0mm 0mm 0mm; }
+* { box-sizing: border-box; } body {margin: 0;}.heading, [data-i_designer-type="text"], [data-i_designer-type="formatted-rich-text"]{margin:0;padding:0;line-height:1.2;}  .navbar-div .hamburger-menu { display: none !important;  text-align: right;
+      font-size: 30px; padding: 10px; color: #472e90; cursor: pointer;
+    }  @media (max-width: 991px) {  .navbar-div .hamburger-menu { display: block !important; }
+      .navbar-div .tab-container, .navbar-div .tab{ width:99%; text-align:center; }
+     .navbar-div .tab-container{display:none}
+    } 
+    @media (max-width: 767px){ .navbar-div .hamburger-menu {   display: block !important; }
+     .navbar-div .tab-container, .navbar-div .tab{
+       width:98%; } 
+    .navbar-div .tab-container{display:none}
+    }</style></head><script>
+    var hamburgerMenu = document.getElementById("hamburgerMenu"); 
+        if(hamburgerMenu !==null){
+          var tabContainer = document.querySelector(".tab-container");  
+          hamburgerMenu.addEventListener("click", function() {
+              if (tabContainer.style.display === "block") {
+                tabContainer.style.display = "none";
+              } else {
+                tabContainer.style.display = "block";
+              }
+            });   
+          function  updateView(){   
+            const viewportWidth = Math.max(document.documentElement.clientWidth, window.innerWidth || 0); 
+            const tabContainer = document.querySelector(".tab-container");  
+            if (viewportWidth >= 991) {  
+              tabContainer.style.display = "block";
+            } else{
+              tabContainer.style.display = "none";
+            } 
+          }  
+          window.addEventListener('resize', updateView); 
+        }
+    </script><script>window.pageSetupSettings = {"isInitialized":false,"pageSettings":{"format":"a4","orientation":"portrait","numberOfPages":1,"width":210,"height":297,"margins":{"top":0,"bottom":0,"left":0,"right":0},"backgroundColor":"#ffffff","pages":[],"headerFooter":{"headerEnabled":true,"footerEnabled":true,"headerHeight":12.7,"footerHeight":12.7,"headerText":"","footerText":"","headerApplyMode":"all","footerApplyMode":"all","headerCustomPages":[],"footerCustomPages":[]},"pageNumbering":{"enabled":false,"startFromPage":1,"excludedPages":[]},"pageNumber":null,"watermark":{"text":null,"image":null},"conditionalPageBreak":null,"sectionConditionalPageBreak":null},"lastAppliedValues":{"headerApplyMode":"all","footerApplyMode":"all","headerCustomPageList":"","footerCustomPageList":"","headerHeight":12.7,"footerHeight":12.7}};</script></html>
