@@ -9,6 +9,7 @@ import org.jsoup.nodes.Element;
 import lombok.AllArgsConstructor;
 import lombok.Data;
 import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.beans.factory.annotation.Value;
 import org.springframework.core.io.ByteArrayResource;
 import org.springframework.http.HttpEntity;
 import org.springframework.http.HttpHeaders;
@@ -22,7 +23,6 @@ import org.springframework.web.client.HttpStatusCodeException;
 import org.springframework.web.client.RestTemplate;
 import org.springframework.web.multipart.MultipartFile;
 
-import com.example.InteractiveDesignBackend.Mypath;
 import com.example.InteractiveDesignBackend.Dto.RequestDTO;
 import com.example.InteractiveDesignBackend.Entity.LogData;
 import com.example.InteractiveDesignBackend.Entity.RecordEntity;
@@ -59,9 +59,12 @@ import javax.crypto.spec.SecretKeySpec;
 import java.net.URLDecoder;
 import java.util.concurrent.Callable;
 import java.util.concurrent.CompletionService;
+import java.util.concurrent.ExecutionException;
 import java.util.concurrent.ExecutorCompletionService;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
+import java.util.concurrent.Future;
+import java.util.concurrent.TimeUnit;
 import java.util.regex.Matcher;
 import java.util.regex.Pattern;
 
@@ -71,9 +74,11 @@ public class RecordService {
 	
 	
 	
+	@Value("${interactive.pdf.render.parallelism:8}")
+	private int pdfParallelism;
 	
-	private static final int PDF_RENDER_PARALLELISM = Math.max(1,
-			Integer.getInteger("interactive.pdf.render.parallelism", 5));
+//	private static final int PDF_RENDER_PARALLELISM = Math.max(1,
+//			Integer.getInteger("interactive.pdf.render.parallelism", 5));
 
 	private static final String BULK_PDF_RENDERER_URL = "http://192.168.0.188:3010/api/v1/s3Upload/uploadHTML6";
 
@@ -247,17 +252,29 @@ public class RecordService {
 
 		List<String> passwordFields = extractTextList(htmlIdToJsonField.get("password"));
 
+//		String htmlContent = new String(
+//				htmlFile.getBytes(),
+//				StandardCharsets.UTF_8).replaceFirst("^\uFEFF", "");
+		
+		
 		String htmlContent = new String(
-				htmlFile.getBytes(),
-				StandardCharsets.UTF_8).replaceFirst("^\uFEFF", "");
+		        htmlFile.getBytes(),
+		        StandardCharsets.UTF_8).replaceFirst("^\uFEFF", "");
+
+		// Parse once only
+		final Document masterDoc = Jsoup.parse(htmlContent);
 
 		RestTemplate restTemplate = new RestTemplate();
 
 		Set<String> usedNames = new HashSet<>();
 
 		StringBuilder generationErrors = new StringBuilder();
+		
+		List<RecordEntity> records =
+		        Collections.synchronizedList(
+		                new ArrayList<>());
 
-		ExecutorService executor = Executors.newFixedThreadPool(PDF_RENDER_PARALLELISM);
+		ExecutorService executor = Executors.newFixedThreadPool(pdfParallelism);
 
 		CompletionService<PdfGenerationResult> completionService = new ExecutorCompletionService<>(executor);
 
@@ -296,7 +313,7 @@ public class RecordService {
 									jsonBytes,
 									mapper,
 									restTemplate,
-									htmlContent,
+									masterDoc,
 									htmlIdToJsonField,
 									fileNameFields,
 									passwordFields,
@@ -305,7 +322,10 @@ public class RecordService {
 
 					submitted++;
 
-					if (submitted - completed >= PDF_RENDER_PARALLELISM) {
+					if (submitted - completed >= pdfParallelism) {
+						System.out.println(
+							    "Submitted=" + submitted +
+							    " Completed=" + completed);
 
 						PdfGenerationResult result = takePdfResult(completionService);
 
@@ -315,7 +335,8 @@ public class RecordService {
 								result,
 								zos,
 								usedNames,
-								generationErrors)) {
+								generationErrors,
+								records)) {
 							generatedCount++;
 						}
 					}
@@ -335,6 +356,9 @@ public class RecordService {
 			}
 
 			while (completed < submitted) {
+				System.out.println(
+					    "Submitted1=" + submitted +
+					    " Completed1=" + completed);
 
 				PdfGenerationResult result = takePdfResult(completionService);
 
@@ -344,7 +368,8 @@ public class RecordService {
 						result,
 						zos,
 						usedNames,
-						generationErrors)) {
+						generationErrors,
+						records)) {
 					generatedCount++;
 				}
 			}
@@ -369,9 +394,23 @@ public class RecordService {
 
 			zos.flush();
 
-		} finally {
+		}finally {
 
-			executor.shutdownNow();
+		    executor.shutdown();
+
+		    try {
+
+		        if (!executor.awaitTermination(60, TimeUnit.SECONDS)) {
+
+		            executor.shutdownNow();
+		        }
+
+		    } catch (InterruptedException e) {
+
+		        executor.shutdownNow();
+
+		        Thread.currentThread().interrupt();
+		    }
 		}
 	}
 
@@ -395,8 +434,8 @@ public class RecordService {
 			byte[] jsonBytes,
 			ObjectMapper mapper,
 			RestTemplate restTemplate,
-			String htmlContent,
-			Map<String, JsonNode> htmlIdToJsonField,
+	        Document masterDoc,
+	        Map<String, JsonNode> htmlIdToJsonField,
 			List<String> fileNameFields,
 			List<String> passwordFields,
 			String pageSize,
@@ -424,7 +463,8 @@ public class RecordService {
 
 				Map<String, JsonNode> normalizedFieldMap = normalizeUserFields(userKey, userNode, dataJson);
 
-				Document doc = Jsoup.parse(htmlContent);
+//				Document doc = Jsoup.parse(htmlContent);
+				Document doc = masterDoc.clone();
 
 				fillTemplate(doc, htmlIdToJsonField, normalizedFieldMap, userKey);
 
@@ -432,6 +472,9 @@ public class RecordService {
 						fileNameFields,
 						normalizedFieldMap,
 						userKey);
+				
+				System.out.println(
+					    "START PDF : " + sourceName);
 
 				byte[] pdfBytes = renderPdf(
 						restTemplate,
@@ -442,6 +485,9 @@ public class RecordService {
 						pageSize,
 						orientation,
 						BULK_PDF_RENDERER_URL);
+				
+				System.out.println(
+					    "DONE PDF : " + sourceName);
 
 				pdfBytes = protectPdfLikeUploadPdf2(
 						pdfBytes,
@@ -547,32 +593,44 @@ public class RecordService {
 	}
 
 	private PdfGenerationResult takePdfResult(
-			CompletionService<PdfGenerationResult> completionService)
-			throws IOException {
+	        CompletionService<PdfGenerationResult> completionService)
+	        throws IOException {
 
-		try {
+	    try {
 
-			return completionService.take().get();
+	        Future<PdfGenerationResult> future =
+	                completionService.poll(10, TimeUnit.MINUTES);
 
-		} catch (InterruptedException ex) {
+	        if (future == null) {
 
-			Thread.currentThread().interrupt();
+	            throw new IOException(
+	                    "Timeout waiting for PDF generation");
+	        }
 
-			throw new IOException("PDF ZIP generation interrupted", ex);
+	        return future.get();
 
-		} catch (Exception ex) {
+	    } catch (InterruptedException ex) {
 
-			throw new IOException(
-					"PDF ZIP generation failed: " + ex.getMessage(),
-					ex);
-		}
+	        Thread.currentThread().interrupt();
+
+	        throw new IOException(
+	                "PDF ZIP generation interrupted",
+	                ex);
+
+	    } catch (ExecutionException ex) {
+
+	        throw new IOException(
+	                "PDF generation task failed",
+	                ex.getCause());
+	    }
 	}
 
 	private boolean writePdfResultToZip(
-			PdfGenerationResult result,
-			ZipOutputStream zos,
-			Set<String> usedNames,
-			StringBuilder generationErrors) throws IOException {
+	        PdfGenerationResult result,
+	        ZipOutputStream zos,
+	        Set<String> usedNames,
+	        StringBuilder generationErrors,
+	        List<RecordEntity> records) throws IOException {
 
 		if (result == null || !result.isSuccess()) {
 
@@ -596,10 +654,15 @@ public class RecordService {
 
 		zos.closeEntry();
 
-		repository.save(
-				RecordEntity.builder()
-						.fileName(zipEntryName)
-						.build());
+//		repository.save(
+//				RecordEntity.builder()
+//						.fileName(zipEntryName)
+//						.build());
+		
+		records.add(
+		        RecordEntity.builder()
+		                .fileName(zipEntryName)
+		                .build());
 
 		return true;
 	}
@@ -1397,7 +1460,18 @@ private byte[] protectPdfIfNeeded(
 
 	
 	
-	public byte[] processAndGeneratePdf(
+	
+
+
+
+
+
+
+
+
+
+
+public byte[] processAndGeneratePdf(
 	        MultipartFile htmlFile,
 	        String payload) throws IOException {
 
@@ -2404,17 +2478,31 @@ private byte[] protectPdfIfNeeded(
 			}
 
 			if (generatedCount == 0) {
-				if (generationErrors.length() == 0) {
-					generationErrors.append(
-							"No HTML generated. Check multipart keys: use file, payload, and jsonFile.");
-				}
 
-				zos.putNextEntry(new ZipEntry("_generation_errors.txt"));
-				zos.write(generationErrors.toString().getBytes(StandardCharsets.UTF_8));
-				zos.closeEntry();
+			    if (generationErrors.length() == 0) {
+			        generationErrors.append(
+			                "No PDF generated. Check that the ZIP contains valid .json files "
+			                        + "and that the payload mapping matches the JSON field names.");
+			    }
+
+			    zos.putNextEntry(new ZipEntry("_generation_errors.txt"));
+
+			    zos.write(
+			            generationErrors.toString().getBytes(StandardCharsets.UTF_8));
+
+			    zos.closeEntry();
 			}
 
+			/*
+			 * Batch save
+			 */
+//			if (!records.isEmpty()) {
+//
+//			    repository.saveAll(records);
+//			}
+
 			zos.finish();
+
 			zos.flush();
 		}
 	}

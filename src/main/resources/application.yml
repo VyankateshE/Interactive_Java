@@ -62,4 +62,4 @@ logging:
 interactive:
   pdf:
     render:
-      parallelism: 8
+      parallelism: 12

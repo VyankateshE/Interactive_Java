@@ -61,7 +61,6 @@ import org.springframework.web.multipart.MultipartFile;
 
 import com.example.InteractiveDesignBackend.FileToMultipartFile;
 import com.example.InteractiveDesignBackend.FileUploadResponse;
-import com.example.InteractiveDesignBackend.Mypath;
 import com.example.InteractiveDesignBackend.Dto.RequestDTO;
 import com.example.InteractiveDesignBackend.Entity.LogData;
 import com.example.InteractiveDesignBackend.Entity.User;
@@ -95,17 +94,17 @@ public class Controller {
 	private static final Logger LOGGER =
 	        LoggerFactory.getLogger(Controller.class);
 	
-	@GetMapping("/getData")
-public ResponseEntity<String> getData() {
-        String response = "Hello the api is running!!";
-        return ResponseEntity.ok(response);
-}
+//	@GetMapping("/getData")
+//public ResponseEntity<String> getData() {
+//        String response = "Hello the api is running!!";
+//        return ResponseEntity.ok(response);
+//}
 
 
 	@GetMapping("/show-html/{id}")
-	public String showHtmlById(@PathVariable("id") Integer id) {
-		String basePath = "C:\\Users\\Ariantech 01\\eclipse-workspace\\InteractiveDesignLatest-main\\htmlFilePath\\HtmlDownloads\\";
-		String filePath = basePath + id + "_downloadabless_html.html"; // Example: 1_editable_html.html,
+	public String showHtmlById(@PathVariable("id") Integer id) throws IOException {
+		String basePath = checkFolder("HtmlDownloads") + File.separator;
+		String filePath = basePath + id + "_downloadable_html.html"; // Example: 1_editable_html.html,
 																		// 2_editable_html.html, etc.
 
 		try {
@@ -277,127 +276,6 @@ public ResponseEntity<String> getData() {
 		return item.isPresent();
 	}
 
-	// not using
-	@GetMapping("/getFile")
-	public ResponseEntity<?> getById(@RequestBody RequestDTO requestDTO) {
-		Date startTime = new Date();
-		try {
-			validateRequest(requestDTO);
-			User user = repository.findById(requestDTO.getId())
-					.orElseThrow(() -> new NoSuchElementException("Invalid user ID"));
-
-			String filePath = user.getEditableHtml();
-			if (filePath == null || filePath.isEmpty()) {
-				throw new FileNotFoundException("Editable HTML file not found for user ID: " + user.getId());
-			}
-
-			String modifiedHtmlContent = modifyHtml(filePath, requestDTO.getJsonData());
-			String downloadType = requestDTO.getDownloadType().trim();
-			String folderPath = checkFolder("DownloadHTMLANDPDF");
-			String timestamp = new SimpleDateFormat("yyyyMMddHHmmss").format(new Date());
-
-			if (downloadType.equalsIgnoreCase("HTML")) {
-				String newFilePath = folderPath + File.separator + user.getId() + "_editable_" + timestamp + ".html";
-				writeToFile(newFilePath, modifiedHtmlContent);
-
-				File file = new File(newFilePath);
-				InputStreamResource resource = new InputStreamResource(new FileInputStream(file));
-
-				logService.logActivity("SUCCESS", "HTML file generated successfully",
-						startTime);
-
-				HttpHeaders headers = new HttpHeaders();
-				headers.setContentType(MediaType.TEXT_HTML);
-				headers.setContentDisposition(ContentDisposition.attachment().filename(file.getName()).build());
-				return new ResponseEntity<>(resource, headers, HttpStatus.OK);
-
-			} else if (downloadType.equalsIgnoreCase("PDF")) {
-				String htmlFilePath = folderPath + File.separator + user.getId() + "_editable_" + timestamp + ".html";
-				writeToFile(htmlFilePath, modifiedHtmlContent);
-
-				File htmlFile = new File(htmlFilePath);
-				MultipartFile multipartFile = convertFileToMultipartFile(htmlFile);
-
-				ResponseEntity<?> response = getPdf(multipartFile, user.getId() + "_converted_" + timestamp);
-
-				logService.logActivity("SUCCESS", "PDF generated successfully",
-						startTime);
-				return response;
-			} else {
-				String msg = "Invalid download type: " + downloadType;
-				logService.logActivity( "FAILURE", msg, startTime);
-				return ResponseEntity.badRequest().body(msg);
-			}
-
-		} catch (FileNotFoundException e) {
-			logService.logActivity("FAILURE", e.getMessage(), startTime);
-			return ResponseEntity.status(HttpStatus.NOT_FOUND).body(e.getMessage());
-
-		} catch (Exception e) {
-			String msg = "Error processing file: " + e.getMessage();
-			e.printStackTrace();
-			logService.logActivity("FAILURE", msg, startTime);
-			return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR).body(msg);
-		}
-	}
-
-	public ResponseEntity<?> getPdf(MultipartFile multipartFile, String name) {
-		try {
-			String apiUrl = "https://estateagents.club/api/api/v1/s3Upload/uploadHtml";
-			String fileName = multipartFile.getOriginalFilename();
-
-			MultiValueMap<String, Object> requestBody = new LinkedMultiValueMap<>();
-			requestBody.add("name", name);
-
-			byte[] fileData = multipartFile.getBytes();
-			HttpHeaders fileHeaders = createFileHeaders(Objects.requireNonNull(fileName));
-			requestBody.add("file", new HttpEntity<>(fileData, fileHeaders));
-
-			RequestEntity<MultiValueMap<String, Object>> requestEntity = RequestEntity.post(apiUrl)
-					.contentType(MediaType.MULTIPART_FORM_DATA).body(requestBody);
-
-			ResponseEntity<Resource> response = restTemplate.exchange(requestEntity, Resource.class);
-
-			if (response.getStatusCode() == HttpStatus.OK) {
-				Resource pdfResource = response.getBody();
-
-				String path = Mypath.getPath() + "DownloadHTMLANDPDF" + File.separator;
-				Path directoryPath = Paths.get(path);
-
-				Files.createDirectories(directoryPath);
-				System.out.println("Directories created or already exist at: " + directoryPath.toString());
-
-				String localFilePath = path + fileName.replaceFirst("[.][^.]+$", "") + ".pdf";
-				File localFile = new File(localFilePath);
-
-				try (InputStream inputStream = pdfResource.getInputStream();
-						OutputStream outputStream = new FileOutputStream(localFile)) {
-					byte[] buffer = new byte[1024];
-					int bytesRead;
-					while ((bytesRead = inputStream.read(buffer)) != -1) {
-						outputStream.write(buffer, 0, bytesRead);
-					}
-					System.out.println("PDF downloaded and saved to: " + localFilePath);
-				}
-
-				HttpHeaders headers = new HttpHeaders();
-				headers.setContentType(MediaType.APPLICATION_PDF);
-				headers.setContentDispositionFormData("attachment", "editable_html.pdf");
-
-				Path pdfPath = localFile.toPath();
-
-				return ResponseEntity.ok().headers(headers).body(new ByteArrayResource(Files.readAllBytes(pdfPath)));
-
-			} else {
-				return ResponseEntity.status(response.getStatusCode())
-						.body(new ByteArrayResource("API request failed".getBytes()));
-			}
-		} catch (IOException e) {
-			e.printStackTrace();
-			return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR)
-					.body(new ByteArrayResource("Internal server error".getBytes()));
-		}
-	}
 
 	private void writeToFile(String filePath, String content) throws IOException {
 		try (BufferedWriter writer = new BufferedWriter(new FileWriter(filePath))) {
@@ -454,7 +332,6 @@ public ResponseEntity<String> getData() {
 		return multipartFile;
 	}
 
-	// need to check
 	@PutMapping("/editTemplate/{id}")
 	public ResponseEntity<String> editUser(@PathVariable Integer id, @RequestBody User user) {
 		Date startTime = new Date();

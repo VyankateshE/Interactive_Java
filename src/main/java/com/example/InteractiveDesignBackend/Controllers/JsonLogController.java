@@ -92,29 +92,3 @@ public class JsonLogController {
 		}
 	}
 }
-
-//@PostMapping
-//public ResponseEntity<?> createLogs(@RequestBody Map<String, Object> payload) throws IOException {
-//  Object messageObj = payload.get("message");
-//  List<String> messages;
-//
-//  if (messageObj instanceof String) {
-//      messages = List.of((String) messageObj);
-//  } else if (messageObj instanceof List) {
-//      messages = (List<String>) messageObj;
-//  } else {
-//      return ResponseEntity.badRequest().body(Map.of("success", false, "error", "Invalid message format"));
-//  }
-//
-//  List<JsonLog> createdLogs = errorLogService.saveLogs(messages);
-//  return ResponseEntity.ok(Map.of("success", true, "logs", createdLogs));
-//}
-//
-//@GetMapping
-//public ResponseEntity<List<JsonLog>> getLogs(
-//      @RequestParam(required = false) String from,
-//      @RequestParam(required = false) String to
-//) throws IOException {
-//  List<JsonLog> logs = errorLogService.getLogs(from, to);
-//  return ResponseEntity.ok(logs);
-//}

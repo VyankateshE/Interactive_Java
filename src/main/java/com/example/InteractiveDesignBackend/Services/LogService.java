@@ -28,4 +28,49 @@ public class LogService {
 			System.err.println("Failed to log activity: " + e.getMessage());
 		}
 	}
+	
+	
+	public void logException(
+	        String result,
+	        String message,
+	        Exception exception,
+	        Date startTime) {
+
+	    try {
+
+	        StringBuilder errorDetails =
+	                new StringBuilder(message);
+
+	        if (exception != null) {
+
+	            errorDetails.append("\n\nException: ")
+	                    .append(exception.getClass().getName());
+
+	            errorDetails.append("\nMessage: ")
+	                    .append(exception.getMessage());
+
+	            errorDetails.append("\n\nStack Trace:\n");
+
+	            for (StackTraceElement element :
+	                    exception.getStackTrace()) {
+
+	                errorDetails.append(element.toString())
+	                        .append("\n");
+	            }
+	        }
+
+	        LogData info = new LogData();
+
+	        info.setResult(result);
+	        info.setMessage(errorDetails.toString());
+	        info.setSendRequestTime(startTime);
+	        info.setOutputResponseTime(new Date());
+
+	        logBookRepo.save(info);
+
+	    } catch (Exception ex) {
+
+	        ex.printStackTrace();
+	    }
+	}
 }
