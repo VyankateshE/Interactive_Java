@@ -72,6 +72,17 @@ import java.util.regex.Pattern;
 public class RecordService {
 	
 	
+	@Autowired
+	private RecordRepository repository;
+
+	@Autowired
+	private LogBookRepo logRepository;
+
+	@Autowired
+	private LogService logService;
+	
+	
+	
 	
 	
 	@Value("${interactive.pdf.render.parallelism:8}")
@@ -121,21 +132,6 @@ public class RecordService {
 		}
 	}
 
-	
-
-	@Autowired
-	private RecordRepository repository;
-
-	@Autowired
-	private LogBookRepo logRepository;
-
-	@Autowired
-	private LogService logService;
-	
-	
-	
-	
-	
 	
 	
 	public byte[] SingleHtmlToPdf(MultipartFile htmlFile) throws IOException {
@@ -199,9 +195,6 @@ public class RecordService {
 
 	
 
-	
-	
-	
 	public void processZipAndGeneratePdfFast(
 			String payloadJson,
 			MultipartFile zipFile,
@@ -425,9 +418,6 @@ public class RecordService {
 		return jsonBaos.toByteArray();
 	}
 
-	
-	
-	
 
 	private Callable<PdfGenerationResult> createBulkPdfTask(
 			String sourceName,
@@ -1459,18 +1449,6 @@ private byte[] protectPdfIfNeeded(
 }
 
 	
-	
-	
-
-
-
-
-
-
-
-
-
-
 public byte[] processAndGeneratePdf(
 	        MultipartFile htmlFile,
 	        String payload) throws IOException {
