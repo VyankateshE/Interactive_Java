@@ -1,0 +1,65 @@
+server:
+  port: 8082
+  address: 192.168.0.188
+
+  tomcat:
+    threads:
+      max: 200
+    max-swallow-size: -1
+    # Raise connection timeout to 60 minutes for large ZIP streaming
+    connection-timeout: 3600000
+
+  compression:
+    enabled: true
+    min-response-size: 1024
+    mime-types: application/json,application/pdf,text/html,text/plain,application/octet-stream
+
+spring:
+  datasource:
+    url: jdbc:mysql://localhost:3306/interactive_design_prod
+    username: root
+    password: root
+    driver-class-name: com.mysql.cj.jdbc.Driver
+
+  jpa:
+    database-platform: org.hibernate.dialect.MySQL8Dialect
+    show-sql: false
+
+    hibernate:
+      ddl-auto: update
+
+    properties:
+      hibernate:
+        jdbc:
+          batch_size: 100
+        order_inserts: true
+        order_updates: true
+
+  servlet:
+    multipart:
+      enabled: true
+      max-file-size: 10GB
+      max-request-size: 10GB
+      file-size-threshold: 10MB
+      location: temp/
+
+  # ── Spring MVC async timeout ───────────────────────────────────────────
+  # -1 = no timeout; the AsyncConfig.java bean also sets this programmatically.
+  # Both are needed: the YAML sets it for all async handlers globally, the
+  # bean sets it for StreamingResponseBody specifically.
+  mvc:
+    async:
+      request-timeout: -1
+
+logging:
+  level:
+    root: INFO
+
+# ── PDF render parallelism (optional tuning) ──────────────────────────────
+# Controls how many PDF render calls run in parallel inside processZipAndGeneratePdfFast.
+# Default is 8. Raise for faster throughput if the Node renderer can handle it;
+# lower if you see OOM errors on large batches.
+interactive:
+  pdf:
+    render:
+      parallelism: 20
